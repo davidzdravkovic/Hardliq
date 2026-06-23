@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Local secrets — use env vars / .env on server
+appsettings.Development.json
+deploy/.env
+
+# Build output
+[Dd]ebug/
+[Rr]elease/
