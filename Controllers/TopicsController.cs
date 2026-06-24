@@ -180,6 +180,77 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         }
     }
 
+    [HttpGet("{topicId:int}/tasks")]
+    public async Task<IActionResult> ListFolderTasks(int topicId, CancellationToken cancellationToken)
+    {
+        var current = ClaimsHelper.GetAuthenticatedUser(User);
+
+        var topic = await db.Topics
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                t => t.Id == topicId && t.UserId == current.Id && t.Type == "topic",
+                cancellationToken);
+
+        if (topic is null)
+            return NotFound(new { message = "Topic not found." });
+
+        var taskTopicIds = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
+            db, current.Id, topicId, cancellationToken);
+
+        if (taskTopicIds.Count == 0)
+            return Ok(new { topicId, items = Array.Empty<object>() });
+
+        var topics = await db.Topics
+            .AsNoTracking()
+            .Where(t => taskTopicIds.Contains(t.Id))
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.Name)
+            .ToListAsync(cancellationToken);
+
+        var parentIds = topics
+            .Where(t => t.ParentId is not null)
+            .Select(t => t.ParentId!.Value)
+            .Distinct()
+            .ToList();
+
+        var parentNames = await db.Topics
+            .AsNoTracking()
+            .Where(t => parentIds.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Name, cancellationToken);
+
+        var topicIds = topics.Select(t => t.Id).ToList();
+
+        var tasks = await db.TaskItems
+            .AsNoTracking()
+            .Where(t => topicIds.Contains(t.TopicId))
+            .ToDictionaryAsync(t => t.TopicId, cancellationToken);
+
+        var items = topics.Select(t =>
+        {
+            tasks.TryGetValue(t.Id, out var task);
+            var parentName = t.ParentId is int pid && parentNames.TryGetValue(pid, out var name)
+                ? name
+                : null;
+
+            return (object)new
+            {
+                t.Id,
+                t.Name,
+                t.Type,
+                t.ParentId,
+                t.SortOrder,
+                parentName,
+                description = task?.Description,
+                status = task?.Status.ToString(),
+                createdAt = task?.CreatedAt,
+                completedAt = task?.CompletedAt,
+                canceledAt = task?.CanceledAt
+            };
+        }).ToList();
+
+        return Ok(new { topicId, items });
+    }
+
     [HttpGet("{topicId:int}/delete-summary")]
     public async Task<IActionResult> DeleteSummary(int topicId)
     {

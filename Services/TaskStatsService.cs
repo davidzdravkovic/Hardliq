@@ -75,7 +75,8 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
         DateTime executedSince,
         CancellationToken cancellationToken)
     {
-        var taskTopicIds = await CollectDescendantTaskTopicIdsAsync(userId, topic.Id, cancellationToken);
+        var taskTopicIds = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
+            db, userId, topic.Id, cancellationToken);
 
         var tasks = db.TaskItems
             .AsNoTracking()
@@ -132,59 +133,12 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
             canceledSince);
     }
 
-    private async Task<HashSet<int>> CollectDescendantTaskTopicIdsAsync(
-        int userId,
-        int topicId,
-        CancellationToken cancellationToken)
-    {
-        var nodes = await db.Topics
-            .AsNoTracking()
-            .Where(t => t.UserId == userId)
-            .Select(t => new TopicNode(t.Id, t.ParentId, t.Type))
-            .ToListAsync(cancellationToken);
-
-        if (nodes.All(t => t.Id != topicId))
-            return [];
-
-        var childrenByParent = nodes
-            .Where(t => t.ParentId is not null)
-            .GroupBy(t => t.ParentId!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var taskTopicIds = new HashSet<int>();
-        var queue = new Queue<TopicNode>();
-
-        if (childrenByParent.TryGetValue(topicId, out var directChildren))
-        {
-            foreach (var child in directChildren)
-                queue.Enqueue(child);
-        }
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-
-            if (current.Type == "task")
-                taskTopicIds.Add(current.Id);
-
-            if (childrenByParent.TryGetValue(current.Id, out var nested))
-            {
-                foreach (var child in nested)
-                    queue.Enqueue(child);
-            }
-        }
-
-        return taskTopicIds;
-    }
-
     private static DateTime GetStartOfUtcWeek(DateTime utcNow)
     {
         var dayOfWeek = (int)utcNow.DayOfWeek;
         var daysFromMonday = dayOfWeek == 0 ? 6 : dayOfWeek - 1;
         return utcNow.Date.AddDays(-daysFromMonday);
     }
-
-    private sealed record TopicNode(int Id, int? ParentId, string Type);
 }
 
 public sealed record TaskStatsResult(
