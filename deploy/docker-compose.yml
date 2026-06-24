@@ -25,8 +25,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=taskmanager;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       Jwt__Key: ${JWT_KEY}
-      Jwt__Issuer: TaskManager
-      Jwt__Audience: TaskManager
+      Jwt__Issuer: Hardliq
+      Jwt__Audience: Hardliq
       Jwt__ExpiresMinutes: "480"
       Cors__AllowedOrigins: ${PUBLIC_ORIGIN}
       Database__AutoMigrate: "true"

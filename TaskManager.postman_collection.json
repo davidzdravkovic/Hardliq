@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "TaskManager",
-    "description": "Local API tests for TaskManager (.NET 8)",
+    "name": "Hardliq",
+    "description": "Local API tests for Hardliq (.NET 8)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
