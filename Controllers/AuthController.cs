@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using TaskManager.Auth;
 using TaskManager.Data;
-using TaskManager.Dto;
+using TaskManager.Dto.RequestsDto;
+using TaskManager.Dto.ResponsesDto;
 using TaskManager.Models;
 
 namespace TaskManager.Controllers;
@@ -15,17 +16,16 @@ public class AuthController(AppDbContext db, JwtTokenService tokenService) : Con
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] CreateUserRequest request)
     {
-                    
-          var conflict = await db.Users
-                    .Where(u => u.Email == request.Email || u.Username == request.Username)
-                    .Select(u => new { u.Email, u.Username })
-                    .FirstOrDefaultAsync();
+        var conflict = await db.Users
+            .Where(u => u.Email == request.Email || u.Username == request.Username)
+            .Select(u => new { u.Email, u.Username })
+            .FirstOrDefaultAsync();
 
         if (conflict is not null)
         {
-          if (conflict.Username == request.Username)
-              return Conflict(new { message = "Username already taken." });
-              return Conflict(new { message = "Email already taken." });
+            if (conflict.Username == request.Username)
+                return Conflict(new MessageResponse { Message = "Username already taken." });
+            return Conflict(new MessageResponse { Message = "Email already taken." });
         }
 
         var user = new User
@@ -43,12 +43,18 @@ public class AuthController(AppDbContext db, JwtTokenService tokenService) : Con
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.SqlState == "23505")
         {
-            return Conflict(new { message = "Username or email already taken." });
+            return Conflict(new MessageResponse { Message = "Username or email already taken." });
         }
 
         var token = tokenService.CreateToken(user);
 
-        return StatusCode(StatusCodes.Status201Created, new { user.Id, user.Username, user.Email, token });
+        return StatusCode(StatusCodes.Status201Created, new AuthRegisterResponse
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            Token = token
+        });
     }
 
     [HttpPost("login")]
@@ -61,12 +67,12 @@ public class AuthController(AppDbContext db, JwtTokenService tokenService) : Con
 
         var token = tokenService.CreateToken(user);
 
-        return Ok(new
+        return Ok(new AuthLoginResponse
         {
-            token,
-            user.Id,
-            user.Username,
-            user.Email
+            Token = token,
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email
         });
     }
 }

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskManager.Data;
 using TaskManager.Models;
 
-namespace TaskManager.Services;
+namespace TaskManager.Utilities;
 
 public static class TopicTreeHelper
 {
@@ -25,7 +25,7 @@ public static class TopicTreeHelper
             .GroupBy(t => t.ParentId!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var folderCount = 0;
+        var topicsCount = 0;
         var taskCount = 0;
         var queue = new Queue<TopicNode>();
 
@@ -40,7 +40,7 @@ public static class TopicTreeHelper
             var current = queue.Dequeue();
 
             if (current.Type == "topic")
-                folderCount++;
+                topicsCount++;
             else
                 taskCount++;
 
@@ -51,10 +51,10 @@ public static class TopicTreeHelper
             }
         }
 
-        return (folderCount, taskCount);
+        return (topicsCount, taskCount);
     }
 
-    public static async Task<HashSet<int>> CollectDescendantTaskTopicIdsAsync(
+    public static async Task<List<Topic>> CollectDescendantTaskTopicIdsAsync(
         AppDbContext db,
         int userId,
         int topicId,
@@ -63,7 +63,6 @@ public static class TopicTreeHelper
         var nodes = await db.Topics
             .AsNoTracking()
             .Where(t => t.UserId == userId)
-            .Select(t => new TopicNode(t.Id, t.ParentId, t.Type))
             .ToListAsync(cancellationToken);
 
         if (nodes.All(t => t.Id != topicId))
@@ -74,8 +73,8 @@ public static class TopicTreeHelper
             .GroupBy(t => t.ParentId!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var taskTopicIds = new HashSet<int>();
-        var queue = new Queue<TopicNode>();
+        var tasks = new List<Topic>();
+        var queue = new Queue<Topic>();
 
         if (childrenByParent.TryGetValue(topicId, out var directChildren))
         {
@@ -88,7 +87,7 @@ public static class TopicTreeHelper
             var current = queue.Dequeue();
 
             if (current.Type == "task")
-                taskTopicIds.Add(current.Id);
+                tasks.Add(current);
 
             if (childrenByParent.TryGetValue(current.Id, out var nested))
             {
@@ -97,7 +96,7 @@ public static class TopicTreeHelper
             }
         }
 
-        return taskTopicIds;
+        return tasks;
     }
 
     private sealed record TopicNode(int Id, int? ParentId, string Type);

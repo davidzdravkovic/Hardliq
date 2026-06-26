@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using TaskManager.Data;
 using TaskManager.Models;
+using TaskManager.Utilities;
 
 namespace TaskManager.Services;
 
@@ -75,8 +76,10 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
         DateTime executedSince,
         CancellationToken cancellationToken)
     {
-        var taskTopicIds = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
+        var taskTopics = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
             db, userId, topic.Id, cancellationToken);
+
+        var taskTopicIds = taskTopics.Select(t => t.Id).ToList();
 
         var tasks = db.TaskItems
             .AsNoTracking()
@@ -151,4 +154,5 @@ public sealed record TaskStatsResult(
     int Canceled,
     DateTime ExecutedSince,
     int CompletedSince,
-    int CanceledSince);
+    int CanceledSince
+    );

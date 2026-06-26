@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using TaskManager.Models;
 
-namespace TaskManager.Dto;
+namespace TaskManager.Dto.RequestsDto;
 
 public class PatchTaskRequest
 {

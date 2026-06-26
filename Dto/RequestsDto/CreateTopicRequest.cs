@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace TaskManager.Dto;
+namespace TaskManager.Dto.RequestsDto;
 
 public class CreateTopicRequest
 {

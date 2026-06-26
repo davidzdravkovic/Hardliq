@@ -3,9 +3,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TaskManager.Auth;
 using TaskManager.Data;
-using TaskManager.Dto;
+using TaskManager.Dto.HelpersDto;
+using TaskManager.Dto.RequestsDto;
+using TaskManager.Dto.ResponsesDto;
 using TaskManager.Models;
 using TaskManager.Services;
+using TaskManager.Utilities;
 
 namespace TaskManager.Controllers;
 
@@ -26,10 +29,10 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
                 .FirstOrDefaultAsync(t => t.Id == parentId && t.UserId == current.Id);
 
             if (parent is null)
-                return NotFound(new { message = "Parent topic not found." });
+                return NotFound(new MessageResponse { Message = "Parent topic not found." });
 
             if (parent.Type != "topic")
-                return BadRequest(new { message = "Tasks cannot contain child topics." });
+                return BadRequest(new MessageResponse { Message = "Tasks cannot contain child topics." });
         }
 
         var siblingType = await db.Topics
@@ -39,7 +42,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
             .FirstOrDefaultAsync();
 
         if (siblingType is not null && siblingType != "topic")
-            return BadRequest(new { message = "All siblings under the same parent must have the same type." });
+            return BadRequest(new MessageResponse { Message = "All siblings under the same parent must have the same type." });
 
         var maxSortOrder = await db.Topics
             .Where(t => t.UserId == current.Id && t.ParentId == request.ParentId)
@@ -57,14 +60,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         db.Topics.Add(topic);
         await db.SaveChangesAsync();
 
-        return StatusCode(StatusCodes.Status201Created, new
-        {
-            topic.Id,
-            topic.Name,
-            topic.Type,
-            topic.ParentId,
-            topic.SortOrder
-        });
+        return StatusCode(StatusCodes.Status201Created, TopicResponse.From(topic));
     }
 
     [HttpGet]
@@ -75,7 +71,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         var current = ClaimsHelper.GetAuthenticatedUser(User);
 
         if (pageSize is < 1 or > 100)
-            return BadRequest(new { message = "Page size must be between 1 and 100." });
+            return BadRequest(new MessageResponse { Message = "Page size must be between 1 and 100." });
 
         var topics = await db.Topics
             .AsNoTracking()
@@ -86,19 +82,17 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
             .ToListAsync();
 
         var childType = topics.FirstOrDefault()?.Type;
-        
-        var items = childType == "task"
-            ? await BuildTaskListItemsAsync(topics)
-            : topics.Select(t => (object)new
-            {
-                t.Id,
-                t.Name,
-                t.Type,
-                t.ParentId,
-                t.SortOrder
-            }).ToList();
 
-        return Ok(new { parentId, childType, items });
+        IReadOnlyList<TopicListItemDto> items = childType == "task"
+            ? await BuildTaskListItemsAsync(topics)
+            : topics.Select(TopicListItemDto.FromTopic).ToList();
+
+        return Ok(new TopicListResponse
+        {
+            ParentId = parentId,
+            ChildType = childType,
+            Items = items
+        });
     }
 
     [HttpGet("search")]
@@ -111,10 +105,10 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         var current = ClaimsHelper.GetAuthenticatedUser(User);
 
         if (page < 1)
-            return BadRequest(new { message = "Page must be at least 1." });
+            return BadRequest(new MessageResponse { Message = "Page must be at least 1." });
 
         if (pageSize is < 1 or > 50)
-            return BadRequest(new { message = "Page size must be between 1 and 50." });
+            return BadRequest(new MessageResponse { Message = "Page size must be between 1 and 50." });
 
         var result = await searchService.SearchAsync(
             current.Id,
@@ -123,25 +117,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
             pageSize,
             cancellationToken);
 
-        return Ok(new
-        {
-            query = result.Query,
-            page = result.Page,
-            pageSize = result.PageSize,
-            totalCount = result.TotalCount,
-            totalPages = result.TotalPages,
-            hasMore = result.HasMore,
-            items = result.Items.Select(i => new
-            {
-                i.Id,
-                i.Name,
-                i.Type,
-                i.ParentId,
-                path = i.Path.Select(p => new { p.Id, p.Name }),
-                description = i.Description,
-                status = i.Status
-            })
-        });
+        return Ok(SearchResponse.From(result));
     }
 
     [HttpGet("stats")]
@@ -160,23 +136,11 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
                 since,
                 cancellationToken);
 
-            return Ok(new
-            {
-                scope = stats.Scope,
-                topicId = stats.TopicId,
-                topicName = stats.TopicName,
-                totalTasks = stats.TotalTasks,
-                pending = stats.Pending,
-                completed = stats.Completed,
-                canceled = stats.Canceled,
-                executedSince = stats.ExecutedSince,
-                completedSince = stats.CompletedSince,
-                canceledSince = stats.CanceledSince
-            });
+            return Ok(StatsResponse.From(stats));
         }
         catch (KeyNotFoundException)
         {
-            return NotFound(new { message = "Topic not found." });
+            return NotFound(new MessageResponse { Message = "Topic not found." });
         }
     }
 
@@ -192,22 +156,21 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
                 cancellationToken);
 
         if (topic is null)
-            return NotFound(new { message = "Topic not found." });
+            return NotFound(new MessageResponse { Message = "Topic not found." });
 
-        var taskTopicIds = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
+        var tasks = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
             db, current.Id, topicId, cancellationToken);
 
-        if (taskTopicIds.Count == 0)
-            return Ok(new { topicId, items = Array.Empty<object>() });
+        if (tasks.Count == 0)
+        {
+            return Ok(new FolderTasksResponse
+            {
+                TopicId = topicId,
+                Items = []
+            });
+        }
 
-        var topics = await db.Topics
-            .AsNoTracking()
-            .Where(t => taskTopicIds.Contains(t.Id))
-            .OrderBy(t => t.SortOrder)
-            .ThenBy(t => t.Name)
-            .ToListAsync(cancellationToken);
-
-        var parentIds = topics
+        var parentIds = tasks
             .Where(t => t.ParentId is not null)
             .Select(t => t.ParentId!.Value)
             .Distinct()
@@ -218,37 +181,28 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
             .Where(t => parentIds.Contains(t.Id))
             .ToDictionaryAsync(t => t.Id, t => t.Name, cancellationToken);
 
-        var topicIds = topics.Select(t => t.Id).ToList();
+        var topicIds = tasks.Select(t => t.Id).ToList();
 
-        var tasks = await db.TaskItems
+        var tasksInTask = await db.TaskItems
             .AsNoTracking()
             .Where(t => topicIds.Contains(t.TopicId))
             .ToDictionaryAsync(t => t.TopicId, cancellationToken);
 
-        var items = topics.Select(t =>
+        var items = tasks.Select(t =>
         {
-            tasks.TryGetValue(t.Id, out var task);
+            tasksInTask.TryGetValue(t.Id, out var task);
             var parentName = t.ParentId is int pid && parentNames.TryGetValue(pid, out var name)
                 ? name
                 : null;
 
-            return (object)new
-            {
-                t.Id,
-                t.Name,
-                t.Type,
-                t.ParentId,
-                t.SortOrder,
-                parentName,
-                description = task?.Description,
-                status = task?.Status.ToString(),
-                createdAt = task?.CreatedAt,
-                completedAt = task?.CompletedAt,
-                canceledAt = task?.CanceledAt
-            };
+            return TopicListItemDto.FromTask(t, task, parentName);
         }).ToList();
 
-        return Ok(new { topicId, items });
+        return Ok(new FolderTasksResponse
+        {
+            TopicId = topicId,
+            Items = items
+        });
     }
 
     [HttpGet("{topicId:int}/delete-summary")]
@@ -264,17 +218,17 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
                 t.Type == "topic");
 
         if (topic is null)
-            return NotFound(new { message = "Topic not found." });
+            return NotFound(new MessageResponse { Message = "Topic not found." });
 
-        var (folderCount, taskCount) = await TopicTreeHelper.CountDescendantsAsync(db, current.Id, topicId);
+        var (folderCount, taskCount) = await TopicTreeHelper.CountDescendantsAsync(db, current.Id, topic.Id);
 
-        return Ok(new
+        return Ok(new DeleteSummaryResponse
         {
-            topicId = topic.Id,
-            name = topic.Name,
-            folderCount,
-            taskCount,
-            totalCount = folderCount + taskCount
+            TopicId = topic.Id,
+            Name = topic.Name,
+            FolderCount = folderCount,
+            TaskCount = taskCount,
+            TotalCount = folderCount + taskCount
         });
     }
 
@@ -289,7 +243,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
             t.Type == "topic");
 
         if (topic is null)
-            return NotFound(new { message = "Topic not found." });
+            return NotFound(new MessageResponse { Message = "Topic not found." });
 
         db.Topics.Remove(topic);
         await db.SaveChangesAsync();
@@ -298,7 +252,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         return NoContent();
     }
 
-    private async Task<List<object>> BuildTaskListItemsAsync(List<Topic> topics)
+    private async Task<List<TopicListItemDto>> BuildTaskListItemsAsync(List<Topic> topics)
     {
         var topicIds = topics.Select(t => t.Id).ToList();
 
@@ -310,20 +264,7 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         return topics.Select(t =>
         {
             tasks.TryGetValue(t.Id, out var task);
-
-            return (object)new
-            {
-                t.Id,
-                t.Name,
-                t.Type,
-                t.ParentId,
-                t.SortOrder,
-                description = task?.Description,
-                status = task?.Status.ToString(),
-                createdAt = task?.CreatedAt,
-                completedAt = task?.CompletedAt,
-                canceledAt = task?.CanceledAt
-            };
+            return TopicListItemDto.FromTask(t, task);
         }).ToList();
     }
 }

@@ -3,7 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TaskManager.Auth;
 using TaskManager.Data;
-using TaskManager.Dto;
+using TaskManager.Dto.RequestsDto;
+using TaskManager.Dto.ResponsesDto;
 using TaskManager.Models;
 using TaskManager.Services;
 
@@ -24,10 +25,10 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
             .FirstOrDefaultAsync(t => t.Id == parentId && t.UserId == current.Id);
 
         if (parent is null)
-            return NotFound(new { message = "Parent topic not found." });
+            return NotFound(new MessageResponse { Message = "Parent topic not found." });
 
         if (parent.Type != "topic")
-            return BadRequest(new { message = "Tasks cannot be created under a task." });
+            return BadRequest(new MessageResponse { Message = "Tasks cannot be created under a task." });
 
         var siblingType = await db.Topics
             .AsNoTracking()
@@ -36,7 +37,7 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
             .FirstOrDefaultAsync();
 
         if (siblingType is not null && siblingType != "task")
-            return BadRequest(new { message = "All siblings under the same parent must have the same type." });
+            return BadRequest(new MessageResponse { Message = "All siblings under the same parent must have the same type." });
 
         var maxSortOrder = await db.Topics
             .Where(t => t.UserId == current.Id && t.ParentId == parentId)
@@ -64,19 +65,7 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
         await db.SaveChangesAsync();
         statsService.Invalidate(current.Id);
 
-        return StatusCode(StatusCodes.Status201Created, new
-        {
-            topic.Id,
-            topic.Name,
-            topic.Type,
-            topic.ParentId,
-            topic.SortOrder,
-            task.Description,
-            status = task.Status.ToString(),
-            task.CreatedAt,
-            task.CompletedAt,
-            task.CanceledAt
-        });
+        return StatusCode(StatusCodes.Status201Created, CreateTaskResponse.From(topic, task));
     }
 
     [HttpPut("{topicId:int}/task")]
@@ -84,16 +73,16 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
     {
         var current = ClaimsHelper.GetAuthenticatedUser(User);
         var topic = await FindTaskTopicAsync(topicId);
-        
+
         if (topic is null)
-            return NotFound(new { message = "Task not found." });
+            return NotFound(new MessageResponse { Message = "Task not found." });
 
         var task = await db.TaskItems.FirstOrDefaultAsync(t => t.TopicId == topicId);
         if (task is null)
-            return NotFound(new { message = "Task details not found." });
+            return NotFound(new MessageResponse { Message = "Task details not found." });
 
         if (request.Status is TaskItemStatus.Pending)
-            return BadRequest(new { message = "Status can only be updated to Completed or Canceled." });
+            return BadRequest(new MessageResponse { Message = "Status can only be updated to Completed or Canceled." });
 
         task.Description = request.Description;
         ApplyStatusChange(task, request.Status);
@@ -101,23 +90,23 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
         await db.SaveChangesAsync();
         statsService.Invalidate(current.Id);
 
-        return Ok(ToResponse(task));
+        return Ok(TaskDetailResponse.From(task));
     }
 
     [HttpPatch("{topicId:int}/task")]
     public async Task<IActionResult> Patch(int topicId, [FromBody] PatchTaskRequest request)
     {
         if (request.Description is null && request.Status is null)
-            return BadRequest(new { message = "Provide description and/or status to update." });
+            return BadRequest(new MessageResponse { Message = "Provide description and/or status to update." });
 
         var current = ClaimsHelper.GetAuthenticatedUser(User);
         var topic = await FindTaskTopicAsync(topicId);
         if (topic is null)
-            return NotFound(new { message = "Task not found." });
+            return NotFound(new MessageResponse { Message = "Task not found." });
 
         var task = await db.TaskItems.FirstOrDefaultAsync(t => t.TopicId == topicId);
         if (task is null)
-            return NotFound(new { message = "Task details not found." });
+            return NotFound(new MessageResponse { Message = "Task details not found." });
 
         if (request.Description is not null)
             task.Description = request.Description;
@@ -125,7 +114,7 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
         if (request.Status is not null)
         {
             if (request.Status is TaskItemStatus.Pending)
-                return BadRequest(new { message = "Status can only be updated to Completed or Canceled." });
+                return BadRequest(new MessageResponse { Message = "Status can only be updated to Completed or Canceled." });
 
             ApplyStatusChange(task, request.Status.Value);
         }
@@ -133,7 +122,7 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
         await db.SaveChangesAsync();
         statsService.Invalidate(current.Id);
 
-        return Ok(ToResponse(task));
+        return Ok(TaskDetailResponse.From(task));
     }
 
     [HttpDelete("{topicId:int}/task")]
@@ -147,7 +136,7 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
             t.Type == "task");
 
         if (topic is null)
-            return NotFound(new { message = "Task not found." });
+            return NotFound(new MessageResponse { Message = "Task not found." });
 
         db.Topics.Remove(topic);
         await db.SaveChangesAsync();
@@ -187,14 +176,4 @@ public class TasksController(AppDbContext db, TaskStatsService statsService) : C
             task.CompletedAt = null;
         }
     }
-
-    private static object ToResponse(TaskItem task) => new
-    {
-        topicId = task.TopicId,
-        task.Description,
-        status = task.Status.ToString(),
-        task.CreatedAt,
-        task.CompletedAt,
-        task.CanceledAt
-    };
 }
