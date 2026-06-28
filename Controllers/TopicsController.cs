@@ -205,6 +205,24 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         });
     }
 
+    [HttpPatch("{topicId:int}")]
+    public async Task<IActionResult> Patch(int topicId, [FromBody] PatchTopicRequest request)
+    {
+        var current = ClaimsHelper.GetAuthenticatedUser(User);
+
+        var topic = await db.Topics.FirstOrDefaultAsync(t =>
+            t.Id == topicId && t.UserId == current.Id);
+
+        if (topic is null)
+            return NotFound(new MessageResponse { Message = "Topic not found." });
+
+        topic.Name = request.Name;
+        await db.SaveChangesAsync();
+        statsService.Invalidate(current.Id, topicId);
+
+        return Ok(TopicResponse.From(topic));
+    }
+
     [HttpGet("{topicId:int}/delete-summary")]
     public async Task<IActionResult> DeleteSummary(int topicId)
     {

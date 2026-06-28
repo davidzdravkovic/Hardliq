@@ -16,7 +16,7 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
         DateTime? since,
         CancellationToken cancellationToken = default)
     {
-        var executedSince = since ?? GetStartOfUtcWeek(DateTime.UtcNow);
+        var executedSince = since ?? GetMondayDate(DateTime.UtcNow);
         var cacheKey = $"task-stats:{userId}:{topicId?.ToString() ?? "all"}:{executedSince:yyyyMMdd}";
 
         if (cache.TryGetValue(cacheKey, out TaskStatsResult? cached) && cached is not null)
@@ -46,11 +46,20 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
         return result;
     }
 
-    public void Invalidate(int userId)
+  public void Invalidate(int userId, int? topicId = null)
+  {
+    var monday = GetMondayDate(DateTime.UtcNow);
+    var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    cache.Remove($"task-stats:{userId}:all:{monday:yyyyMMdd}");
+    cache.Remove($"task-stats:{userId}:all:{monthStart:yyyyMMdd}");
+
+    if (topicId is int id)
     {
-        // Short TTL handles freshness; this is a hook for future explicit invalidation.
-        cache.Remove($"task-stats:{userId}:all:{GetStartOfUtcWeek(DateTime.UtcNow):yyyyMMdd}");
+        cache.Remove($"task-stats:{userId}:{id}:{monday:yyyyMMdd}");
+        cache.Remove($"task-stats:{userId}:{id}:{monthStart:yyyyMMdd}");
     }
+  }
 
     private async Task<TaskStatsResult> BuildWorkspaceStatsAsync(
         int userId,
@@ -76,12 +85,12 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
         DateTime executedSince,
         CancellationToken cancellationToken)
     {
-        var taskTopics = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
+        var taskRowsFromTopic = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
             db, userId, topic.Id, cancellationToken);
 
-        var taskTopicIds = taskTopics.Select(t => t.Id).ToList();
+        var taskTopicIds = taskRowsFromTopic.Select(t => t.Id).ToList();
 
-        var tasks = db.TaskItems
+        var tasksRowFromTask = db.TaskItems
             .AsNoTracking()
             .Where(t => taskTopicIds.Contains(t.TopicId));
 
@@ -89,7 +98,7 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
             scope: "folder",
             topicId: topic.Id,
             topicName: topic.Name,
-            tasks,
+            tasksRowFromTask,
             executedSince,
             cancellationToken);
     }
@@ -136,8 +145,9 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
             canceledSince);
     }
 
-    private static DateTime GetStartOfUtcWeek(DateTime utcNow)
+    private static DateTime GetMondayDate(DateTime utcNow)
     {
+
         var dayOfWeek = (int)utcNow.DayOfWeek;
         var daysFromMonday = dayOfWeek == 0 ? 6 : dayOfWeek - 1;
         return utcNow.Date.AddDays(-daysFromMonday);
@@ -154,5 +164,4 @@ public sealed record TaskStatsResult(
     int Canceled,
     DateTime ExecutedSince,
     int CompletedSince,
-    int CanceledSince
-    );
+    int CanceledSince);
