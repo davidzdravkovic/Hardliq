@@ -289,6 +289,33 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         });
     }
 
+    [HttpDelete("{topicId:int}/children")]
+    public async Task<IActionResult> Empty(int topicId)
+    {
+        var current = ClaimsHelper.GetAuthenticatedUser(User);
+
+        var topic = await db.Topics.FirstOrDefaultAsync(t =>
+            t.Id == topicId &&
+            t.UserId == current.Id &&
+            t.Type == "topic");
+
+        if (topic is null)
+            return NotFound(new MessageResponse { Message = "Topic not found." });
+
+        var children = await db.Topics
+            .Where(t => t.UserId == current.Id && t.ParentId == topicId)
+            .ToListAsync();
+
+        if (children.Count == 0)
+            return NoContent();
+
+        db.Topics.RemoveRange(children);
+        await db.SaveChangesAsync();
+        statsService.Invalidate(current.Id, topicId);
+
+        return NoContent();
+    }
+
     [HttpDelete("{topicId:int}")]
     public async Task<IActionResult> Delete(int topicId)
     {
