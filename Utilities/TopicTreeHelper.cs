@@ -99,5 +99,47 @@ public static class TopicTreeHelper
         return tasks;
     }
 
+    public static async Task<bool> IsDescendantAsync(
+        AppDbContext db,
+        int userId,
+        int ancestorId,
+        int candidateId,
+        CancellationToken cancellationToken = default)
+    {
+        if (ancestorId == candidateId)
+            return true;
+
+        var nodes = await db.Topics
+            .AsNoTracking()
+            .Where(t => t.UserId == userId)
+            .Select(t => new TopicNode(t.Id, t.ParentId, t.Type))
+            .ToListAsync(cancellationToken);
+
+        var childrenByParent = nodes
+            .Where(t => t.ParentId is not null)
+            .GroupBy(t => t.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
+
+        var queue = new Queue<int>();
+        queue.Enqueue(ancestorId);
+
+        while (queue.Count > 0)
+        {
+            var currentId = queue.Dequeue();
+            if (!childrenByParent.TryGetValue(currentId, out var childIds))
+                continue;
+
+            foreach (var childId in childIds)
+            {
+                if (childId == candidateId)
+                    return true;
+
+                queue.Enqueue(childId);
+            }
+        }
+
+        return false;
+    }
+
     private sealed record TopicNode(int Id, int? ParentId, string Type);
 }

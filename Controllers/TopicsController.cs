@@ -66,18 +66,27 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
     [HttpGet]
     public async Task<IActionResult> List(
         [FromQuery] int? parentId,
+        [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20)
     {
         var current = ClaimsHelper.GetAuthenticatedUser(User);
 
+        if (page < 1)
+            return BadRequest(new MessageResponse { Message = "Page must be at least 1." });
+
         if (pageSize is < 1 or > 100)
             return BadRequest(new MessageResponse { Message = "Page size must be between 1 and 100." });
 
-        var topics = await db.Topics
+        var query = db.Topics
             .AsNoTracking()
-            .Where(t => t.UserId == current.Id && t.ParentId == parentId)
+            .Where(t => t.UserId == current.Id && t.ParentId == parentId);
+
+        var totalCount = await query.CountAsync();
+
+        var topics = await query
             .OrderBy(t => t.SortOrder)
             .ThenBy(t => t.Name)
+            .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
 
@@ -91,7 +100,11 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         {
             ParentId = parentId,
             ChildType = childType,
-            Items = items
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+            HasMore = page * pageSize < totalCount
         });
     }
 
@@ -208,6 +221,9 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
     [HttpPatch("{topicId:int}")]
     public async Task<IActionResult> Patch(int topicId, [FromBody] PatchTopicRequest request)
     {
+        if (!request.HasChanges)
+            return BadRequest(new MessageResponse { Message = "Provide name, moveParent, and/or move to update." });
+
         var current = ClaimsHelper.GetAuthenticatedUser(User);
 
         var topic = await db.Topics.FirstOrDefaultAsync(t =>
@@ -216,9 +232,32 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
         if (topic is null)
             return NotFound(new MessageResponse { Message = "Topic not found." });
 
-        topic.Name = request.Name;
+        var previousParentId = topic.ParentId;
+
+        if (request.Name is not null)
+            topic.Name = request.Name;
+
+        if (request.MoveParent)
+        {
+            var moveError = await TryMoveTopicAsync(current.Id, topic, request.ParentId);
+            if (moveError is not null)
+                return BadRequest(new MessageResponse { Message = moveError });
+        }
+
+        if (request.Move is not null)
+        {
+            var reorderError = await TryReorderTopicAsync(current.Id, topic, request.Move);
+            if (reorderError is not null)
+                return BadRequest(new MessageResponse { Message = reorderError });
+        }
+
         await db.SaveChangesAsync();
         statsService.Invalidate(current.Id, topicId);
+        if (previousParentId != topic.ParentId)
+        {
+            statsService.Invalidate(current.Id, previousParentId);
+            statsService.Invalidate(current.Id, topic.ParentId);
+        }
 
         return Ok(TopicResponse.From(topic));
     }
@@ -284,5 +323,69 @@ public class TopicsController(AppDbContext db, TaskStatsService statsService, To
             tasks.TryGetValue(t.Id, out var task);
             return TopicListItemDto.FromTask(t, task);
         }).ToList();
+    }
+
+    private async Task<string?> TryMoveTopicAsync(int userId, Topic topic, int? newParentId)
+    {
+        if (newParentId == topic.ParentId)
+            return null;
+
+        if (topic.Type == "topic" && newParentId == topic.Id)
+            return "A folder cannot be moved into itself.";
+
+        if (topic.Type == "topic" && newParentId is int parentId &&
+            await TopicTreeHelper.IsDescendantAsync(db, userId, topic.Id, parentId))
+            return "A folder cannot be moved into its own subfolder.";
+
+        if (newParentId is int targetParentId)
+        {
+            var parent = await db.Topics
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == targetParentId && t.UserId == userId);
+
+            if (parent is null)
+                return "Parent topic not found.";
+
+            if (parent.Type != "topic")
+                return "Tasks cannot be moved under another task.";
+        }
+
+        var siblingType = await db.Topics
+            .AsNoTracking()
+            .Where(t => t.UserId == userId && t.ParentId == newParentId && t.Id != topic.Id)
+            .Select(t => t.Type)
+            .FirstOrDefaultAsync();
+
+        if (siblingType is not null && siblingType != topic.Type)
+            return "All siblings under the same parent must have the same type.";
+
+        var maxSortOrder = await db.Topics
+            .Where(t => t.UserId == userId && t.ParentId == newParentId && t.Id != topic.Id)
+            .MaxAsync(t => (int?)t.SortOrder);
+
+        topic.ParentId = newParentId;
+        topic.SortOrder = (maxSortOrder ?? -1) + 1;
+        return null;
+    }
+
+    private async Task<string?> TryReorderTopicAsync(int userId, Topic topic, string direction)
+    {
+        var siblings = await db.Topics
+            .Where(t => t.UserId == userId && t.ParentId == topic.ParentId)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.Name)
+            .ToListAsync();
+
+        var index = siblings.FindIndex(t => t.Id == topic.Id);
+        if (index < 0)
+            return "Topic not found among siblings.";
+
+        var targetIndex = direction == "up" ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= siblings.Count)
+            return direction == "up" ? "Already at the top." : "Already at the bottom.";
+
+        var neighbor = siblings[targetIndex];
+        (topic.SortOrder, neighbor.SortOrder) = (neighbor.SortOrder, topic.SortOrder);
+        return null;
     }
 }

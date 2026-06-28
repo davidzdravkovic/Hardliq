@@ -46,7 +46,7 @@ Set:
 | `POSTGRES_PASSWORD` | strong random password |
 | `JWT_KEY` | `openssl rand -base64 48` |
 | `PUBLIC_ORIGIN` | `http://YOUR_VPS_IP` or `https://tasks.yourdomain.com` |
-| `HTTP_PORT` | `80` |
+| `HTTP_PORT` | `80` (on **chat-prod**, port 80 is used by the chat app — use e.g. `8080` instead) |
 
 2. **Build and start**
 
