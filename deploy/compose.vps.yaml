@@ -1,0 +1,41 @@
+name: taskmanager-vps
+
+services:
+  db-init:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-taskmanager}
+    volumes:
+      - ./docker-init.sh:/docker-init.sh:ro
+    command: ["sh", "/docker-init.sh"]
+    networks: [database]
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-taskmanager};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY}
+      Jwt__Issuer: Hardliq
+      Jwt__Audience: Hardliq
+      Jwt__ExpiresMinutes: "480"
+      Cors__AllowedOrigins: ${PUBLIC_ORIGIN}
+      Database__AutoMigrate: "true"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    networks: [edge, database]
+
+networks:
+  edge:
+    external: true
+    name: edge
+  database:
+    external: true
+    name: database
