@@ -10,7 +10,7 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
 
-    public async Task<TaskStatsResult> GetStatsAsync(
+    public async Task<TaskStatsResult?> GetStatsAsync(
         int userId,
         int? topicId,
         DateTime? since,
@@ -37,7 +37,7 @@ public sealed class TaskStatsService(AppDbContext db, IMemoryCache cache)
                     cancellationToken);
 
             if (topic is null)
-                throw new KeyNotFoundException("Topic not found.");
+                return null;
 
             result = await BuildFolderStatsAsync(userId, topic, executedSince, cancellationToken);
         }

@@ -141,5 +141,47 @@ public static class TopicTreeHelper
         return false;
     }
 
+    public static async Task<int> GetDescendantFolderDepthAsync(
+        AppDbContext db,
+        int userId,
+        int topicId,
+        CancellationToken cancellationToken = default)
+    {
+        var nodes = await db.Topics
+            .AsNoTracking()
+            .Where(t => t.UserId == userId && t.Type == "topic")
+            .Select(t => new { t.Id, t.ParentId })
+            .ToListAsync(cancellationToken);
+
+        var childrenByParent = nodes
+            .Where(t => t.ParentId is not null)
+            .GroupBy(t => t.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
+
+        var maxExtra = 0;
+        var queue = new Queue<(int Id, int Depth)>();
+
+        if (childrenByParent.TryGetValue(topicId, out var directChildren))
+        {
+            foreach (var childId in directChildren)
+                queue.Enqueue((childId, 1));
+        }
+
+        while (queue.Count > 0)
+        {
+            var (id, depth) = queue.Dequeue();
+            if (depth > maxExtra)
+                maxExtra = depth;
+
+            if (childrenByParent.TryGetValue(id, out var nested))
+            {
+                foreach (var childId in nested)
+                    queue.Enqueue((childId, depth + 1));
+            }
+        }
+
+        return maxExtra;
+    }
+
     private sealed record TopicNode(int Id, int? ParentId, string Type);
 }

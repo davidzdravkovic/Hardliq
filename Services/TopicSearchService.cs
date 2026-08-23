@@ -21,16 +21,20 @@ public class TopicSearchService(AppDbContext db)
 
         var pattern = $"%{EscapeLike(query)}%";
 
+
         var filtered = db.Topics
             .AsNoTracking()
             .Where(t => t.UserId == userId)
             .Where(t =>
-                (t.Type == "topic" && EF.Functions.ILike(t.Name, pattern))
-                || (t.Type == "task" && EF.Functions.ILike(t.Name, pattern))
+                EF.Functions.ILike(t.Name, pattern)
                 || (t.Type == "task" && db.TaskItems.Any(ti =>
                     ti.TopicId == t.Id && EF.Functions.ILike(ti.Description, pattern))));
 
+
         var totalCount = await filtered.CountAsync(cancellationToken);
+
+        if(totalCount == 0)
+            return new TopicSearchResult(query, page, pageSize, 0, []);
 
         var pageItems = await filtered
             .OrderBy(t => t.Type == "task" ? 1 : 0)
