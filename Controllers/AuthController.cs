@@ -24,6 +24,7 @@ public class AuthController(AuthService authService) : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
+    
         var result = await authService.Authenticate(request.Username, request.Password);
 
         if (!result.Succeeded)
