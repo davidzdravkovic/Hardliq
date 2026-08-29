@@ -68,7 +68,11 @@ public class TopicService(AppDbContext db, TaskStatsService taskStatsService, To
         return Result<TopicResponse>.Success(TopicResponse.From(topic));
     }
 
-    public async Task<Result<TopicListResponse>> ListTopicsAsync(int userId, int? parentId)
+    public async Task<Result<TopicListResponse>> ListTopicsAsync(
+        int userId,
+        int? parentId,
+        int? page,
+        int? pageSize)
     {
         if (parentId is int id)
         {
@@ -83,15 +87,53 @@ public class TopicService(AppDbContext db, TaskStatsService taskStatsService, To
                 return Result<TopicListResponse>.Fail(ErrorCodes.ParentTypeTaskNotAllowed);
         }
 
-        var topics = await db.Topics
+        var childrenQuery = db.Topics
             .AsNoTracking()
             .Where(t => t.UserId == userId && t.ParentId == parentId)
             .OrderBy(t => t.SortOrder)
-            .ThenBy(t => t.Name)
-            .Take(TreePolicy.MaxChildrenPerFolder)
-            .ToListAsync();
+            .ThenBy(t => t.Name);
 
-        var childType = topics.FirstOrDefault()?.Type;
+        var totalCount = await childrenQuery.CountAsync();
+
+        var childType = await db.Topics
+            .AsNoTracking()
+            .Where(t => t.UserId == userId && t.ParentId == parentId)
+            .Select(t => t.Type)
+            .FirstOrDefaultAsync();
+
+        List<Topic> topics;
+        int responsePage;
+        int responsePageSize;
+        bool hasMore;
+
+        if (page is null && pageSize is null)
+        {
+            topics = await childrenQuery
+                .Take(TreePolicy.MaxChildrenPerFolder)
+                .ToListAsync();
+
+            responsePage = 1;
+            responsePageSize = TreePolicy.MaxChildrenPerFolder;
+            hasMore = false;
+        }
+        else
+        {
+            responsePage = page ?? 1;
+            responsePageSize = pageSize ?? 20;
+
+            if (responsePageSize is < 1 or > 50)
+                return Result<TopicListResponse>.Fail(ErrorCodes.InvalidPageSize);
+
+            if (responsePage < 1)
+                return Result<TopicListResponse>.Fail(ErrorCodes.InvalidPage);
+
+            topics = await childrenQuery
+                .Skip((responsePage - 1) * responsePageSize)
+                .Take(responsePageSize)
+                .ToListAsync();
+
+            hasMore = responsePage * responsePageSize < totalCount;
+        }
 
         IReadOnlyList<TopicListItemDto> items = childType == "task"
             ? await BuildTaskListItemsAsync(topics)
@@ -102,10 +144,10 @@ public class TopicService(AppDbContext db, TaskStatsService taskStatsService, To
             ParentId = parentId,
             ChildType = childType,
             Items = items,
-            TotalCount = items.Count,
-            Page = 1,
-            PageSize = TreePolicy.MaxChildrenPerFolder,
-            HasMore = false
+            TotalCount = page is null && pageSize is null ? items.Count : totalCount,
+            Page = responsePage,
+            PageSize = responsePageSize,
+            HasMore = hasMore
         });
     }
 

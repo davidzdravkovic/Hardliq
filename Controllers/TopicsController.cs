@@ -22,10 +22,13 @@ public class TopicsController(TopicService topicService) : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery] int? parentId)
+    public async Task<IActionResult> List(
+        [FromQuery] int? parentId,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize)
     {
         var current = ClaimsHelper.GetAuthenticatedUser(User);
-        var result = await topicService.ListTopicsAsync(current.Id, parentId);
+        var result = await topicService.ListTopicsAsync(current.Id, parentId, page, pageSize);
 
         if (!result.Succeeded)
             return ErrorResults.From(result.Error!);
