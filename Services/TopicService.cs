@@ -10,7 +10,11 @@ using TaskManager.Utilities;
 
 namespace TaskManager.Services;
 
-public class TopicService(AppDbContext db, TaskStatsService taskStatsService, TopicSearchService searchService)
+public class TopicService(
+    AppDbContext db,
+    TaskStatsService taskStatsService,
+    TopicSearchService searchService,
+    RagEmbedClient ragEmbedClient)
 {
     public async Task<Result<TopicResponse>> CreateTopicAsync(int userId, CreateTopicRequest request)
     {
@@ -389,7 +393,38 @@ public class TopicService(AppDbContext db, TaskStatsService taskStatsService, To
             taskStatsService.Invalidate(userId, topic.ParentId);
         }
 
+        await RequestEmbedsAfterTopicPatchAsync(
+            userId,
+            topic,
+            request,
+            cancellationToken);
+
         return Result<TopicResponse>.Success(TopicResponse.From(topic));
+    }
+
+    private async Task RequestEmbedsAfterTopicPatchAsync(
+        int userId,
+        Topic topic,
+        PatchTopicRequest request,
+        CancellationToken cancellationToken)
+    {
+        var pathChanged = request.Name is not null || request.MoveParent;
+        if (!pathChanged)
+            return;
+
+        if (topic.Type == "task")
+        {
+            ragEmbedClient.RequestEmbed(topic.Id);
+            return;
+        }
+
+        var tasks = await TopicTreeHelper.CollectDescendantTaskTopicIdsAsync(
+            db,
+            userId,
+            topic.Id,
+            cancellationToken);
+
+        ragEmbedClient.RequestEmbedMany(tasks.Select(t => t.Id));
     }
 
     private async Task<string?> TryMoveTopicAsync(

@@ -10,6 +10,9 @@ public static class ErrorResults
     {
         ErrorCodes.InvalidCredentials => new UnauthorizedObjectResult(Body(error)),
         ErrorCodes.UsernameTaken or ErrorCodes.EmailTaken => new ConflictObjectResult(Body(error)),
+        ErrorCodes.PremiumRequired => new ObjectResult(Body(error)) { StatusCode = StatusCodes.Status403Forbidden },
+        ErrorCodes.RagDailyLimitReached => new ObjectResult(Body(error)) { StatusCode = StatusCodes.Status429TooManyRequests },
+        ErrorCodes.RagServiceUnavailable => new ObjectResult(Body(error)) { StatusCode = StatusCodes.Status503ServiceUnavailable },
         ErrorCodes.TopicNotFound or ErrorCodes.TaskNotFound => new NotFoundObjectResult(Body(error)),
         ErrorCodes.ParentTypeTaskNotAllowed
             or ErrorCodes.SiblingTypeMismatch
@@ -52,6 +55,9 @@ public static class ErrorResults
         ErrorCodes.MoveIntoDescendant => "A folder cannot be moved into its own subfolder.",
         ErrorCodes.AlreadyAtTop => "Already at the top.",
         ErrorCodes.AlreadyAtBottom => "Already at the bottom.",
+        ErrorCodes.PremiumRequired => "Premium access is required to use AI ask.",
+        ErrorCodes.RagDailyLimitReached => "You have reached your daily AI ask limit.",
+        ErrorCodes.RagServiceUnavailable => "AI service is temporarily unavailable.",
         _ => error
     };
 }

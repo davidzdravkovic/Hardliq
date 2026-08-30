@@ -6,6 +6,7 @@ obj/
 
 # Local secrets — use env vars / .env on server
 appsettings.Development.json
+Configuration/rag.json
 deploy/.env
 
 # Build output

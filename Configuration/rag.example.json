@@ -1,0 +1,13 @@
+{
+  "Rag": {
+    "BaseUrl": "http://127.0.0.1:8000",
+    "InternalKey": "CHANGE_ME_INTERNAL_KEY",
+    "DailyLimitPerUser": 20,
+    "PremiumUsernames": [
+      "your-username"
+    ],
+    "UnlimitedUsernames": [
+      "davidz"
+    ]
+  }
+}

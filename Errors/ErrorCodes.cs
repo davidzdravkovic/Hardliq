@@ -25,4 +25,8 @@ public static class ErrorCodes
     public const string MoveIntoDescendant = "folder-cannot-move-into-subfolder";
     public const string AlreadyAtTop = "already-at-the-top";
     public const string AlreadyAtBottom = "already-at-the-bottom";
+
+    public const string PremiumRequired = "premium-required";
+    public const string RagDailyLimitReached = "rag-daily-limit-reached";
+    public const string RagServiceUnavailable = "rag-service-unavailable";
 }

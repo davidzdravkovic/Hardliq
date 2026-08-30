@@ -9,7 +9,7 @@ using TaskManager.Models;
 namespace TaskManager.Services;
 
 
-public class TaskService(AppDbContext db, TaskStatsService taskStatsService)
+public class TaskService(AppDbContext db, TaskStatsService taskStatsService, RagEmbedClient ragEmbedClient)
 {
     public async Task<Result<CreateTaskResponse>> CreateTaskAsync (int userId, int parentId, CreateTaskRequest request )
     {
@@ -62,6 +62,7 @@ public class TaskService(AppDbContext db, TaskStatsService taskStatsService)
         db.TaskItems.Add(task);
         await db.SaveChangesAsync();
         taskStatsService.Invalidate(userId);
+        ragEmbedClient.RequestEmbed(topic.Id);
         return Result<CreateTaskResponse>.Success(CreateTaskResponse.From(topic, task));
     }
 
@@ -99,6 +100,7 @@ public class TaskService(AppDbContext db, TaskStatsService taskStatsService)
 
         await db.SaveChangesAsync();
         taskStatsService.Invalidate(userId);
+        ragEmbedClient.RequestEmbed(topicId);
         return Result<TaskDetailResponse>.Success(TaskDetailResponse.From(task));
     }
 

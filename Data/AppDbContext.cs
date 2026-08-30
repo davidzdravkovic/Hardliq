@@ -9,6 +9,7 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Topic> Topics => Set<Topic>();
     public DbSet<TaskItem> TaskItems => Set<TaskItem>();
+    public DbSet<RagDailyUsage> RagDailyUsages => Set<RagDailyUsage>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<User>()
@@ -38,6 +39,15 @@ public class AppDbContext : DbContext
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RagDailyUsage>()
+            .HasKey(r => new { r.UserId, r.UsageDate });
+
+        modelBuilder.Entity<RagDailyUsage>()
+            .HasOne(r => r.User)
+            .WithMany()
+            .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

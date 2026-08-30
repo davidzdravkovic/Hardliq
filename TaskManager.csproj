@@ -28,4 +28,10 @@
     <InternalsVisibleTo Include="Hardliq.Api.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="Configuration\rag.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
