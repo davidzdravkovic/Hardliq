@@ -15,3 +15,7 @@ else
     -c "CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER}"
   echo "database ${POSTGRES_DB} created"
 fi
+
+psql -h postgres -U "$POSTGRES_USER" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 \
+  -c "CREATE EXTENSION IF NOT EXISTS vector;"
+echo "pgvector extension ensured on ${POSTGRES_DB}"

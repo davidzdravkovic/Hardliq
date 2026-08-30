@@ -28,8 +28,6 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://127.0.0.1:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:120b-cloud}
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -51,6 +49,9 @@ services:
       Database__AutoMigrate: "true"
       Rag__BaseUrl: http://ai:8000
       Rag__InternalKey: ${RAG_INTERNAL_KEY}
+      Rag__PremiumUsernames__0: ${RAG_PREMIUM_USERNAME:-davidz}
+      Rag__UnlimitedUsernames__0: ${RAG_UNLIMITED_USERNAME:-davidz}
+      Rag__DailyLimitPerUser: ${RAG_DAILY_LIMIT:-50}
     depends_on:
       db-init:
         condition: service_completed_successfully

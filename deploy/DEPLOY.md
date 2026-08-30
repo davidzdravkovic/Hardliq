@@ -141,7 +141,8 @@ docker compose -f compose.vps.yaml --env-file .env up -d --build
 - **api** on `edge` + `database` (nginx proxies to it)
 - **ai** on `database` only (internal; API calls `http://ai:8000`)
 - **no web/db** in this compose — infra serves React `dist/` and Postgres
-- Infra Postgres must support **pgvector**
+- **db-init** creates the app database and runs `CREATE EXTENSION vector` (see `docker-init.sh`)
+- Infra Postgres image must include pgvector (e.g. `pgvector/pgvector:pg17` in `~/Infra/compose.yaml`, not plain `postgres:17-alpine`)
 
 ## Troubleshooting
 
@@ -151,7 +152,7 @@ docker compose -f compose.vps.yaml --env-file .env up -d --build
 | API errors | `docker compose logs api` |
 | RAG / ask errors | `docker compose logs ai` |
 | DB connection failed | `docker compose logs db`, verify `.env` passwords |
-| pgvector migration failed | DB image must support pgvector (`pgvector/pgvector:pg16` locally) |
+| pgvector migration failed | Infra Postgres must use a pgvector image (`pgvector/pgvector:pg17`); `db-init` also runs `CREATE EXTENSION vector` |
 | CORS errors | `PUBLIC_ORIGIN` must match the URL in the browser exactly |
 | Build fails on web path | Ensure `TaskManagerReact` is sibling of `TaskManager` |
 | Build fails on ai path | Ensure `HardliqAi` is sibling of `TaskManager` |
