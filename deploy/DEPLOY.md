@@ -1,6 +1,6 @@
 # Deploy TaskManager to a VPS
 
-Stack: **PostgreSQL** + **.NET API** + **React (nginx)** via Docker Compose.
+Stack: **PostgreSQL (pgvector)** + **.NET API** + **Python (RAG)** + **React (nginx)** via Docker Compose.
 
 ## VPS requirements
 
@@ -8,6 +8,7 @@ Stack: **PostgreSQL** + **.NET API** + **React (nginx)** via Docker Compose.
 - Docker Engine + Docker Compose plugin
 - Ports **80** (and **443** later if you add HTTPS) open in firewall
 - At least **1 GB RAM**, **10 GB disk**
+- Infra **PostgreSQL must have pgvector** installed (API migration runs `CREATE EXTENSION vector`)
 
 Install Docker (Ubuntu):
 
@@ -19,12 +20,13 @@ sudo usermod -aG docker $USER
 
 ## Folder layout on the server
 
-Clone both repos as **siblings**:
+Clone repos as **siblings**:
 
 ```text
 /home/you/
   TaskManager/        # API + deploy/
-  TaskManagerReact/   # frontend
+  TaskManagerReact/   # frontend (local compose only)
+  HardliqAi/          # Python RAG service
 ```
 
 The compose file expects this layout.
@@ -45,8 +47,9 @@ Set:
 |----------|---------|
 | `POSTGRES_PASSWORD` | strong random password |
 | `JWT_KEY` | `openssl rand -base64 48` |
+| `RAG_INTERNAL_KEY` | shared secret for .NET → Python (`/internal/*`) |
 | `PUBLIC_ORIGIN` | `http://YOUR_VPS_IP` or `https://tasks.yourdomain.com` |
-| `HTTP_PORT` | `80` (on **chat-prod**, port 80 is used by the chat app — use e.g. `8080` instead) |
+| `HTTP_PORT` | `80` (local compose only; on **chat-prod**, use e.g. `8080`) |
 
 2. **Build and start**
 
@@ -77,6 +80,7 @@ docker compose --env-file .env ps
 
 # Logs
 docker compose --env-file .env logs -f api
+docker compose --env-file .env logs -f ai
 docker compose --env-file .env logs -f web
 
 # Restart after code update
@@ -115,11 +119,29 @@ From `TaskManager/deploy` with Docker running:
 
 ```bash
 cp .env.example .env
-# set PUBLIC_ORIGIN=http://localhost
+# set PUBLIC_ORIGIN=http://localhost, POSTGRES_PASSWORD, JWT_KEY, RAG_INTERNAL_KEY
 docker compose --env-file .env up --build
 ```
 
+Services: **db** (pgvector), **ai** (Python :8000), **api**, **web** (nginx :80).
+
 Open http://localhost
+
+## VPS deploy (infra nginx + postgres)
+
+Use `compose.vps.yaml` when **nginx** and **postgres** already run on external Docker networks (`edge`, `database`):
+
+```bash
+cd ~/TaskManager/deploy
+cp .env.example .env
+# POSTGRES_* = infra postgres admin; PUBLIC_ORIGIN = your public URL
+docker compose -f compose.vps.yaml --env-file .env up -d --build
+```
+
+- **api** on `edge` + `database` (nginx proxies to it)
+- **ai** on `database` only (internal; API calls `http://ai:8000`)
+- **no web/db** in this compose — infra serves React `dist/` and Postgres
+- Infra Postgres must support **pgvector**
 
 ## Troubleshooting
 
@@ -127,9 +149,12 @@ Open http://localhost
 |---------|--------|
 | Blank page | `docker compose logs web` |
 | API errors | `docker compose logs api` |
+| RAG / ask errors | `docker compose logs ai` |
 | DB connection failed | `docker compose logs db`, verify `.env` passwords |
+| pgvector migration failed | DB image must support pgvector (`pgvector/pgvector:pg16` locally) |
 | CORS errors | `PUBLIC_ORIGIN` must match the URL in the browser exactly |
 | Build fails on web path | Ensure `TaskManagerReact` is sibling of `TaskManager` |
+| Build fails on ai path | Ensure `HardliqAi` is sibling of `TaskManager` |
 
 ## Security notes
 

@@ -2,7 +2,7 @@ name: taskmanager
 
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: taskmanager
@@ -15,6 +15,32 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+  ai:
+    build:
+      context: ../../HardliqAi
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: taskmanager
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      RAG_INTERNAL_KEY: ${RAG_INTERNAL_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:120b-cloud}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-180}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
 
   api:
     build:
@@ -30,9 +56,16 @@ services:
       Jwt__ExpiresMinutes: "480"
       Cors__AllowedOrigins: ${PUBLIC_ORIGIN}
       Database__AutoMigrate: "true"
+      Rag__BaseUrl: http://ai:8000
+      Rag__InternalKey: ${RAG_INTERNAL_KEY}
+      Rag__PremiumUsernames__0: ${RAG_PREMIUM_USERNAME:-davidz}
+      Rag__UnlimitedUsernames__0: ${RAG_UNLIMITED_USERNAME:-davidz}
+      Rag__DailyLimitPerUser: ${RAG_DAILY_LIMIT:-50}
     depends_on:
       db:
         condition: service_healthy
+      ai:
+        condition: service_started
 
   web:
     build:
@@ -40,9 +73,10 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
+        VITE_ENABLE_ASK: "true"
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-80}:80"
+      - "${HTTP_PORT:-8080}:80"
     depends_on:
       - api
 

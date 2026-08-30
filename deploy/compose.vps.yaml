@@ -13,6 +13,28 @@ services:
     command: ["sh", "/docker-init.sh"]
     networks: [database]
 
+  ai:
+    build:
+      context: ../../HardliqAi
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-taskmanager}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      RAG_INTERNAL_KEY: ${RAG_INTERNAL_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://127.0.0.1:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gpt-oss:120b-cloud}
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    networks: [database]
+
   api:
     build:
       context: ..
@@ -27,9 +49,13 @@ services:
       Jwt__ExpiresMinutes: "480"
       Cors__AllowedOrigins: ${PUBLIC_ORIGIN}
       Database__AutoMigrate: "true"
+      Rag__BaseUrl: http://ai:8000
+      Rag__InternalKey: ${RAG_INTERNAL_KEY}
     depends_on:
       db-init:
         condition: service_completed_successfully
+      ai:
+        condition: service_started
     networks: [edge, database]
 
 networks:
