@@ -57,7 +57,7 @@ public static class ErrorResults
         ErrorCodes.AlreadyAtBottom => "Already at the bottom.",
         ErrorCodes.PremiumRequired => "Premium access is required to use AI ask.",
         ErrorCodes.RagDailyLimitReached => "You have reached your daily AI ask limit.",
-        ErrorCodes.RagServiceUnavailable => "AI service is temporarily unavailable.",
+        ErrorCodes.RagServiceUnavailable => "I couldn't reach the assistant right now. Please try again in a moment.",
         _ => error
     };
 }
