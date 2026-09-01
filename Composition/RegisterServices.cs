@@ -50,11 +50,12 @@ public static class RegisterServices
         services.AddScoped<AuthService>();
         services.AddScoped<TaskService>();
         services.AddScoped<TopicService>();
+        services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.AddSingleton<JwtTokenService>();
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();
 
-        services.AddJwtAuthentication(configuration);
+        services.AddJwtAuthentication();
         services.AddAuthorization(options =>
         {
             options.FallbackPolicy = new AuthorizationPolicyBuilder()
@@ -92,29 +93,33 @@ public static class RegisterServices
         return services;
     }
 
-    private static IServiceCollection AddJwtAuthentication(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    private static IServiceCollection AddJwtAuthentication(this IServiceCollection services)
     {
-        var jwtSection = configuration.GetSection("Jwt");
-        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSection["Key"]!));
+        services.AddSingleton<IConfigureOptions<JwtBearerOptions>, JwtBearerOptionsSetup>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidIssuer = jwtSection["Issuer"],
-                    ValidAudience = jwtSection["Audience"],
-                    IssuerSigningKey = signingKey
-                };
-            });
+            .AddJwtBearer();
 
         return services;
+    }
+
+    private sealed class JwtBearerOptionsSetup(IOptions<JwtOptions> jwtOptions) : IConfigureOptions<JwtBearerOptions>
+    {
+        public void Configure(JwtBearerOptions options)
+        {
+            var jwt = jwtOptions.Value;
+
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = jwt.Issuer,
+                ValidAudience = jwt.Audience,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key))
+            };
+        }
     }
 
     private static IServiceCollection AddCors(

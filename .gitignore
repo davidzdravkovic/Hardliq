@@ -8,6 +8,8 @@ obj/
 appsettings.Development.json
 Configuration/rag.json
 deploy/.env
+deploy/monitoring
+deploy/docker-compose.monitoring.yml
 
 # Build output
 [Dd]ebug/
