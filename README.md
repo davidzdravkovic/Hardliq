@@ -1,4 +1,4 @@
-# Hardliq
+<h1 align="center">Hardliq</h1>
 
 A task is a concrete unit you can execute. It exists to serve a goal — and goals shift. They roll up into larger aims that change more slowly. Hardliq keeps the big picture steady while you break it into smaller pieces you can change, finish, and see progress on.
 
