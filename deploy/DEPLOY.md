@@ -1,4 +1,4 @@
-# Deploy TaskManager to a VPS
+# Deploy Hardliq to a VPS
 
 Stack: **PostgreSQL (pgvector)** + **.NET API** + **Python (RAG)** + **React (nginx)** via Docker Compose.
 
@@ -24,9 +24,9 @@ Clone repos as **siblings**:
 
 ```text
 /home/you/
-  TaskManager/        # API + deploy/
-  TaskManagerReact/   # frontend (local compose only)
-  HardliqAi/          # Python RAG service
+  TaskManager/        # API + deploy/  → github.com/davidzdravkovic/Hardliq
+  TaskManagerReact/   # frontend       → github.com/davidzdravkovic/HardliqClient
+  HardliqAi/          # Python RAG     → github.com/davidzdravkovic/HardliqAi
 ```
 
 The compose file expects this layout.
@@ -100,6 +100,7 @@ On your PC, push to git. On the VPS:
 ```bash
 cd ~/TaskManager && git pull
 cd ~/TaskManagerReact && git pull
+cd ~/HardliqAi && git pull
 cd ~/TaskManager/deploy && ./deploy.sh
 ```
 
