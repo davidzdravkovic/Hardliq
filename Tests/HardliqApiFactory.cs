@@ -34,6 +34,7 @@ public sealed class HardliqApiFactory : WebApplicationFactory<Program>, IAsyncLi
         builder.UseSetting("Jwt:Key", "integration-test-jwt-key-32chars-min!");
         builder.UseSetting("Jwt:Issuer", "Hardliq");
         builder.UseSetting("Jwt:Audience", "Hardliq");
+        builder.UseSetting("Jwt:ExpiresMinutes", "480");
         builder.UseSetting("Database:AutoMigrate", "true");
         builder.UseSetting("Cors:AllowedOrigins", "http://localhost");
         builder.UseSetting("Rag:BaseUrl", "http://127.0.0.1:8000");

@@ -95,18 +95,23 @@ public static class RegisterServices
 
     private static IServiceCollection AddJwtAuthentication(this IServiceCollection services)
     {
-        services.AddSingleton<IConfigureOptions<JwtBearerOptions>, JwtBearerOptionsSetup>();
-
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer();
+
+        services.AddSingleton<IPostConfigureOptions<JwtBearerOptions>, JwtBearerOptionsSetup>();
 
         return services;
     }
 
-    private sealed class JwtBearerOptionsSetup(IOptions<JwtOptions> jwtOptions) : IConfigureOptions<JwtBearerOptions>
+    private sealed class JwtBearerOptionsSetup(IOptions<JwtOptions> jwtOptions) : IPostConfigureOptions<JwtBearerOptions>
     {
-        public void Configure(JwtBearerOptions options)
+        public void PostConfigure(string? name, JwtBearerOptions options)
         {
+            if (name is not null && name != JwtBearerDefaults.AuthenticationScheme)
+            {
+                return;
+            }
+
             var jwt = jwtOptions.Value;
 
             options.TokenValidationParameters = new TokenValidationParameters
