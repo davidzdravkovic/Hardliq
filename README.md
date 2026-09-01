@@ -12,8 +12,7 @@ Register to use the app. AI Ask is available for premium users.
 
 ## Screenshot
 
-
-`docs/screenshots/dashboard.png`
+![Hardliq — nested folders, task workspace, and Ask AI](docs/screenshots/dashboard.png)
 
 ---
 
